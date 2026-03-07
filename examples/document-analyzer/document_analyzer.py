@@ -81,7 +81,7 @@ def extract_document_text(file_bytes, mime_type):
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ]:
         return extract_text_from_docx(file_bytes)
-    
+
     raise ValueError(f"Unsupported file type: {mime_type}")
 
 # FilePart processing
@@ -101,33 +101,51 @@ def get_file_bytes(part):
         return base64.b64decode(data)
 
     return data
-    
-# Handler
-def handler(messages):
 
+# Handler
+def handler(messages: list[dict]):
+    """
+    Receives task.history — a list of A2A Message objects.
+    Each message has: role, parts[], kind, messageId, contextId, taskId
+    Each part has: kind="text"|"file", and either text or file.bytes+mimeType
+    """
     if not messages:
         return "No messages received."
+    import json
+    print("DEBUG messages:", json.dumps(messages, indent=2, default=str))
 
     prompt = ""
     extracted_docs = []
 
     for msg in messages:
-        parts = msg.get("parts", [])
+        # if a role is provided, only process user messages; treat missing
+        # roles as coming from the user so that tests/clients without a role
+        # field still work.
+        role = msg.get("role")
+        if role is not None and role != "user":
+            continue
 
+        # be defensive: parts could be None or omitted
+        parts = msg.get("parts") or []
         for part in parts:
-
             if part.get("kind") == "text":
                 prompt = part.get("text", "")
 
             elif part.get("kind") == "file":
                 try:
-                    b64 = part["file"]["bytes"]
-                    file_bytes = base64.b64decode(b64)
+                    file_info = part.get("file", {})
+                    b64_data = file_info.get("bytes") or file_info.get("data")
+                    mime_type = file_info.get("mimeType", "")
 
-                    mime_type = part["file"].get("mimeType", "")
+                    if not b64_data:
+                        raise ValueError("No file data found")
 
+                    file_bytes = (
+                        base64.b64decode(b64_data)
+                        if isinstance(b64_data, str)
+                        else b64_data
+                    )
                     doc_text = extract_document_text(file_bytes, mime_type)
-
                     extracted_docs.append(doc_text)
 
                 except Exception as e:
@@ -137,8 +155,7 @@ def handler(messages):
         return "No valid document found in the messages."
 
     combined_document = "\n\n".join(extracted_docs)
-
-    llm_input = f"""
+    result = agent.run(input=f"""
 User Prompt:
 {prompt}
 
@@ -146,11 +163,9 @@ Document Content:
 {combined_document}
 
 Provide analysis based on the prompt.
-"""
-
-    result = agent.run(input=llm_input)
-
+""")
     return result
+
 
 # Bindu config
 config = {
@@ -163,6 +178,7 @@ config = {
         "cors_origins": ["http://localhost:5173"],
     },
     "skills": ["skills/document-processing"],
+    "enable_system_message": False,
 }
 
 if __name__ == "__main__":

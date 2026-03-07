@@ -16,16 +16,17 @@ Run with:
 import io
 import base64
 import pytest
-import os, sys
-from unittest.mock import patch, MagicMock
+import os
+import sys
+from unittest.mock import patch
 
 
 # Helpers to generate minimal in-memory PDF and DOCX fixtures
-
 def make_pdf_bytes(text: str = "Hello from PDF") -> bytes:
     """Create a minimal single-page PDF containing `text` using pypdf/reportlab."""
     try:
         from reportlab.pdfgen import canvas
+
         buf = io.BytesIO()
         c = canvas.Canvas(buf)
         c.drawString(100, 750, text)
@@ -52,6 +53,7 @@ def make_pdf_bytes(text: str = "Hello from PDF") -> bytes:
 def make_docx_bytes(text: str = "Hello from DOCX") -> bytes:
     """Create a minimal DOCX file in memory containing `text`."""
     from docx import Document
+
     doc = Document()
     doc.add_paragraph(text)
     buf = io.BytesIO()
@@ -70,7 +72,9 @@ def b64(data: bytes) -> str:
 sys.path.insert(
     0,
     os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "examples", "document-analyzer")
+        os.path.join(
+            os.path.dirname(__file__), "..", "..", "examples", "document-analyzer"
+        )
     ),
 )
 
@@ -83,10 +87,8 @@ from document_analyzer import (
 )
 
 
-
 # PDF Extraction
 class TestExtractTextFromPdf:
-
     def test_extracts_text_from_valid_pdf(self):
         pdf_bytes = make_pdf_bytes("Research methodology section")
         result = extract_text_from_pdf(pdf_bytes)
@@ -96,6 +98,7 @@ class TestExtractTextFromPdf:
     def test_returns_string_for_empty_pdf(self):
         """A PDF with no text layers should return an empty string, not raise."""
         from pypdf import PdfWriter
+
         buf = io.BytesIO()
         writer = PdfWriter()
         writer.add_blank_page(width=612, height=792)
@@ -110,6 +113,7 @@ class TestExtractTextFromPdf:
     def test_multipage_pdf_joins_pages(self):
         try:
             from reportlab.pdfgen import canvas
+
             buf = io.BytesIO()
             c = canvas.Canvas(buf)
             c.drawString(100, 750, "Page one content")
@@ -125,7 +129,6 @@ class TestExtractTextFromPdf:
 
 # DOCX Extraction
 class TestExtractTextFromDocx:
-
     def test_extracts_text_from_valid_docx(self):
         docx_bytes = make_docx_bytes("Key findings of the study")
         result = extract_text_from_docx(docx_bytes)
@@ -133,6 +136,7 @@ class TestExtractTextFromDocx:
 
     def test_returns_string_for_empty_docx(self):
         from docx import Document
+
         doc = Document()
         buf = io.BytesIO()
         doc.save(buf)
@@ -141,6 +145,7 @@ class TestExtractTextFromDocx:
 
     def test_multiple_paragraphs_joined(self):
         from docx import Document
+
         doc = Document()
         doc.add_paragraph("First paragraph.")
         doc.add_paragraph("Second paragraph.")
@@ -157,7 +162,6 @@ class TestExtractTextFromDocx:
 
 # extract_document_text dispatcher
 class TestExtractDocumentText:
-
     def test_dispatches_pdf_mime(self):
         pdf_bytes = make_pdf_bytes("dispatch test pdf")
         result = extract_document_text(pdf_bytes, "application/pdf")
@@ -182,7 +186,6 @@ class TestExtractDocumentText:
 
 # get_file_bytes
 class TestGetFileBytes:
-
     def test_decodes_base64_string(self):
         raw = b"binary document content"
         file_part = {"file": {"bytes": b64(raw)}}
@@ -229,7 +232,6 @@ def mock_agent():
 
 
 class TestHandler:
-
     def test_returns_error_on_empty_messages(self, mock_agent):
         result = handler([])
         assert result == "No messages received."
@@ -317,9 +319,7 @@ class TestHandler:
             "kind": "file",
             "file": {"bytes": b64(b"fake data"), "mimeType": "image/png"},
         }
-        messages = [
-            {"parts": [make_text_part("analyze this"), bad_file_part]}
-        ]
+        messages = [{"parts": [make_text_part("analyze this"), bad_file_part]}]
         # The handler catches the exception and appends an error string
         result = handler(messages)
         # An error doc was appended, so agent still runs
